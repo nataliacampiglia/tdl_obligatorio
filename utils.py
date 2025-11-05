@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
     accuracy_score,
@@ -27,7 +28,8 @@ def evaluate(model, criterion, data_loader, device):
             x = x.to(device)  # movemos los datos al dispositivo
             y = y.to(device)  # movemos los datos al dispositivo
             output = model(x)  # forward pass
-            total_loss += criterion(output, y).item()  # acumulamos la perdida
+            y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
+            total_loss += criterion(output, y_matched).item()  # acumulamos la perdida
     return total_loss / len(data_loader)  # retornamos la perdida promedio
 
 
@@ -60,6 +62,18 @@ def print_log(epoch, train_loss, val_loss):
         f"Epoch: {epoch + 1:03d} | Train Loss: {train_loss:.5f} | Val Loss: {val_loss:.5f}"
     )
 
+def match_mask(logits, y):
+    # y: (N,H,W) índices
+    if y.dim() == 4 and y.size(1) == 1:
+        y = y.squeeze(1)
+    if logits.shape[-2:] != y.shape[-2:]:
+        y = F.interpolate(
+            y.unsqueeze(1).float(),  # (N,1,H,W)
+            size=logits.shape[-2:],  # (h,w) de la salida
+            mode="nearest"
+        ).squeeze(1).long()
+    return y
+    
 def train(
     model,
     optimizer,
@@ -109,8 +123,9 @@ def train(
             optimizer.zero_grad()  # reseteamos los gradientes
 
             output = model(x)  # forward pass (prediccion)
+            y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
             batch_loss = criterion(
-                output, y
+                output, y_matched
             )  # calculamos la perdida con la salida esperada
 
             batch_loss.backward()  # backpropagation
