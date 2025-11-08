@@ -7,6 +7,9 @@ from sklearn.metrics import (
 )
 import wandb, json
 import numpy as np
+import seaborn as sns
+
+TARGET_NAMES = ["background", "foreground"]
 
 def evaluate(model, criterion, data_loader, device):
     """
@@ -432,3 +435,24 @@ def download_run(run_id, WANDB_PROJECT, model_name="model.pth"):
 
     print("CONFIG:", run.config)
     return run.config
+
+
+def plot_confusion_matrix(cm, title='Matriz de confusión'):
+    """
+    Grafica una matriz de confusión.
+    """
+    
+    plt.figure(figsize=(4, 3))
+    sns.heatmap(
+        cm,
+        annot=True,               # mostrar valores
+        fmt="d",                  # formato entero
+        cmap="RdPu",              # paleta de color
+        xticklabels=TARGET_NAMES, # etiquetas en eje X
+        yticklabels=TARGET_NAMES  # etiquetas en eje Y
+    )
+    plt.title(title)
+    plt.xlabel("Predicted label")
+    plt.ylabel("True label")
+    plt.tight_layout()
+    plt.show()
