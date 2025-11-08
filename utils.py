@@ -28,8 +28,9 @@ def evaluate(model, criterion, data_loader, device):
             x = x.to(device)  # movemos los datos al dispositivo
             y = y.to(device)  # movemos los datos al dispositivo
             output = model(x)  # forward pass
-            y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
-            total_loss += criterion(output, y_matched).item()  # acumulamos la perdida
+            # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
+            output = match_output_dim(output, y)
+            total_loss += criterion(output, y).item()  # acumulamos la perdida
     return total_loss / len(data_loader)  # retornamos la perdida promedio
 
 
@@ -73,6 +74,38 @@ def match_mask(logits, y):
             mode="nearest"
         ).squeeze(1).long()
     return y
+
+# hacer que la salida adapte do tamano a al tamano del target
+def match_output_dim(output, target):
+    # print(f"output shape: {output.shape}, target shape: {target.shape}")
+    # if len(output.shape) == 4 and len(target.shape) == 3:
+    #     # output: [B, C, H, W], target: [B, H, W]
+    #     # Reducir canales promediando o tomando el primer canal
+    #     if output.shape[1] > 1:
+    #         # Promediar los canales para obtener un solo canal
+    #         output = output.mean(dim=1, keepdim=True)  # [B, 1, H, W]
+    #     else:
+    #         # Ya tiene un solo canal, solo mantenerlo
+    #         pass
+    #     # Ahora output es [B, 1, H, W], necesitamos ajustar dimensiones espaciales
+    #     if output.shape[-2:] != target.shape[-2:]:
+    #         output = F.interpolate(
+    #             output,
+    #             size=target.shape[-2:],
+    #             mode="bilinear",
+    #             align_corners=False
+    #         )  # [B, 1, H_target, W_target]
+    #     # Eliminar la dimensión del canal para que coincida con target [B, H, W]
+    #     output = output.squeeze(1)
+    # el
+    if output.shape[-2:] != target.shape[-2:]:
+        output = F.interpolate(
+            output,
+            size=target.shape[-2:],
+            mode="nearest"
+        )
+    # print(f"output shape after interpolation: {output.shape}, target shape: {target.shape}")
+    return output
     
 def train(
     model,
@@ -123,9 +156,10 @@ def train(
             optimizer.zero_grad()  # reseteamos los gradientes
 
             output = model(x)  # forward pass (prediccion)
-            y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
+            output = match_output_dim(output, y)
+            # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
             batch_loss = criterion(
-                output, y_matched
+                output, y
             )  # calculamos la perdida con la salida esperada
 
             batch_loss.backward()  # backpropagation
