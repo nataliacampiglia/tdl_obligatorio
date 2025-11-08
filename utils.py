@@ -456,3 +456,54 @@ def plot_confusion_matrix(cm, title='Matriz de confusión'):
     plt.ylabel("True label")
     plt.tight_layout()
     plt.show()
+
+
+import pandas as pd
+
+def print_metrics_report(report, title="Reporte de clasificación:"):
+    """
+    Imprime un DataFrame de métricas (por ejemplo, el classification_report con Dice)
+    con formato legible: columnas centradas, espacio adicional, y líneas separadoras.
+
+    Parámetros
+    ----------
+    report : dict o DataFrame
+        Diccionario (como el devuelto por classification_report(output_dict=True))
+        o un DataFrame de métricas.
+    title : str, opcional
+        Título que se muestra antes del reporte (por defecto agrega un emoji 📊).
+
+    Ejemplo
+    -------
+    print_metrics_report(report_dict)
+    """
+
+    # imprimir dice si existe
+    if report["macro avg"]["dice"]:
+        print(f"Dice: {report['macro avg']['dice']:.4f}\n\n")
+
+
+    print(title + "\n")
+
+    # Convertir a DataFrame si aún no lo es
+    if not isinstance(report, pd.DataFrame):
+        df_report = pd.DataFrame(report).T
+    else:
+        df_report = report.copy()
+
+
+    # Redondear y ajustar visualmente
+    df_report = df_report.round(2)
+
+    # Reemplazar NaN por vacío
+    df_report = df_report.replace(np.nan, "", regex=True)
+
+    with pd.option_context(
+        "display.max_rows", None,
+        "display.max_columns", None,
+        "display.width", 130,
+        "display.colheader_justify", "center",
+    ):
+        print(df_report.to_string(index=True, justify="center", col_space=12))
+
+    print("=" * 90 + "\n")
