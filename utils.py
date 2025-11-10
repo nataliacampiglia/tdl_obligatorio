@@ -1,13 +1,17 @@
 import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+
+import wandb, json
+import numpy as np
+import seaborn as sns
+import pandas as pd
+
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
 )
-import wandb, json
-import numpy as np
-import seaborn as sns
+from datetime import datetime
 
 TARGET_NAMES = ["background", "foreground"]
 
@@ -142,55 +146,67 @@ def train(
         Tuple[List[float], List[float]]: Una tupla con dos listas, la primera con el error de entrenamiento de cada época y la segunda con el error de validación de cada época.
 
     """
-    epoch_train_errors = []  # colectamos el error de traing para posterior analisis
-    epoch_val_errors = []  # colectamos el error de validacion para posterior analisis
-    if do_early_stopping:
-        early_stopping = EarlyStopping(
-            patience=patience
-        )  # instanciamos el early stopping
-
-    for epoch in range(epochs):  # loop de entrenamiento
-        model.train()  # ponemos el modelo en modo de entrenamiento
-        train_loss = 0  # acumulador de la perdida de entrenamiento
-        for x, y in train_loader:
-            x = x.to(device)  # movemos los datos al dispositivo
-            y = y.to(device)  # movemos los datos al dispositivo
-
-            optimizer.zero_grad()  # reseteamos los gradientes
-
-            output = model(x)  # forward pass (prediccion)
-            output = match_output_dim(output, y)
-            # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
-            batch_loss = criterion(
-                output, y
-            )  # calculamos la perdida con la salida esperada
-
-            batch_loss.backward()  # backpropagation
-            optimizer.step()  # actualizamos los pesos
-
-            train_loss += batch_loss.item()  # acumulamos la perdida
-
-        train_loss /= len(train_loader)  # calculamos la perdida promedio de la epoca
-        epoch_train_errors.append(train_loss)  # guardamos la perdida de entrenamiento
-        val_loss = evaluate(
-            model, criterion, val_loader, device
-        )  # evaluamos el modelo en el conjunto de validacion
-        epoch_val_errors.append(val_loss)  # guardamos la perdida de validacion
-
+    try:
+        epoch_train_errors = []  # colectamos el error de traing para posterior analisis
+        epoch_val_errors = []  # colectamos el error de validacion para posterior analisis
         if do_early_stopping:
-            early_stopping(val_loss)  # llamamos al early stopping
+            early_stopping = EarlyStopping(
+                patience=patience
+            )  # instanciamos el early stopping
 
-        if log_fn is not None:  # si se pasa una funcion de log
-            if (epoch + 1) % log_every == 0:  # loggeamos cada log_every epocas
-                log_fn(epoch, train_loss, val_loss)  # llamamos a la funcion de log
+        for epoch in range(epochs):  # loop de entrenamiento
+            model.train()  # ponemos el modelo en modo de entrenamiento
+            train_loss = 0  # acumulador de la perdida de entrenamiento
+            index = 0
+            for x, y in train_loader:
+                x = x.to(device)  # movemos los datos al dispositivo
+                y = y.to(device)  # movemos los datos al dispositivo
 
-        if do_early_stopping and early_stopping.early_stop:
-            print(
-                f"Detener entrenamiento en la época {epoch}, la mejor pérdida fue {early_stopping.best_score:.5f}"
-            )
-            break
+                optimizer.zero_grad()  # reseteamos los gradientes
 
-    return epoch_train_errors, epoch_val_errors
+                output = model(x)  # forward pass (prediccion)
+                output = match_output_dim(output, y)
+                # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
+                batch_loss = criterion(
+                    output, y
+                )  # calculamos la perdida con la salida esperada
+
+                batch_loss.backward()  # backpropagation
+                optimizer.step()  # actualizamos los pesos
+
+                train_loss += batch_loss.item()  # acumulamos la perdida
+                # if index == 0:
+                #     print(f"Batch loss: {batch_loss.item()}")
+                #     print(f"Output shape: {output.shape}")
+                #     print(f"Target shape: {y.shape}")
+                # if index % 20 == 0:
+                #     print(f"{index}/{len(train_loader)} - train_loss: {(train_loss / (index + 1)):.3f}")
+                index += 1
+
+            train_loss /= len(train_loader)  # calculamos la perdida promedio de la epoca
+            epoch_train_errors.append(train_loss)  # guardamos la perdida de entrenamiento
+            val_loss = evaluate(
+                model, criterion, val_loader, device
+            )  # evaluamos el modelo en el conjunto de validacion
+            epoch_val_errors.append(val_loss)  # guardamos la perdida de validacion
+
+            if do_early_stopping:
+                early_stopping(val_loss)  # llamamos al early stopping
+
+            if log_fn is not None:  # si se pasa una funcion de log
+                if (epoch + 1) % log_every == 0:  # loggeamos cada log_every epocas
+                    log_fn(epoch, train_loss, val_loss)  # llamamos a la funcion de log
+
+            if do_early_stopping and early_stopping.early_stop:
+                print(
+                    f"Detener entrenamiento en la época {epoch}, la mejor pérdida fue {early_stopping.best_score:.5f}"
+                )
+                break
+
+        return epoch_train_errors, epoch_val_errors
+    except Exception as e:
+        print(f"Error en el entrenamiento: {e}")
+        return None, None
 
 
 def plot_training(train_errors, val_errors):
@@ -458,7 +474,7 @@ def plot_confusion_matrix(cm, title='Matriz de confusión'):
     plt.show()
 
 
-import pandas as pd
+
 
 def print_metrics_report(report, title="Reporte de clasificación:"):
     """
@@ -507,3 +523,75 @@ def print_metrics_report(report, title="Reporte de clasificación:"):
         print(df_report.to_string(index=True, justify="center", col_space=12))
 
     print("=" * 90 + "\n")
+
+
+def rle_encode(mask):
+    pixels = np.array(mask).flatten(order='F')  # Aplanar la máscara en orden Fortran
+    pixels = np.concatenate([[0], pixels, [0]])  # Añadir ceros al principio y final
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1  # Encontrar transiciones
+    runs[1::2] = runs[1::2] - runs[::2]  # Calcular longitudes
+    return ' '.join(str(x) for x in runs)
+
+
+
+
+def predict_and_build_submission(
+    model,
+    device,
+    data_loader,
+    out_csv="submission",
+    threshold=0.5,
+    target_class=1,   # usado solo si el modelo es multiclass
+):
+    """
+    Genera un submission.csv (con timestamp) a partir de un modelo de segmentación
+    que puede ser binario (salida B,1,H,W) o multiclass (salida B,C,H,W).
+
+    - Binario: usa sigmoid y threshold.
+    - Multiclass: usa softmax y se queda con `target_class`, luego threshold.
+
+    Args:
+        model: modelo de segmentación
+        device: torch.device
+        img_dir: carpeta con las imágenes de test
+        out_csv: nombre base del csv (se le agrega datetime)
+        transform: mismas transforms determinísticas que en train (ToTensor, Normalize)
+        threshold: umbral para binarizar
+        target_class: clase de interés si el modelo tiene C>1 canales
+    """
+    model.eval()
+
+    image_ids = []
+    encoded_pixels = []
+
+    with torch.no_grad():
+        for x, name in data_loader:
+            x = x.to(device)
+            logits = model(x)  # puede ser (1,1,H,W) o (1,C,H,W)
+
+            # detectamos si es binario o multiclase
+            if logits.shape[1] == 1:
+                # --- caso binario ---
+                probs = torch.sigmoid(logits)          # (1,1,H,W)
+                mask = (probs > threshold).float()
+            else:
+                # --- caso multiclass ---
+                probs = torch.softmax(logits, dim=1)   # (1,C,H,W)
+                fg_prob = probs[:, target_class, ...]  # (1,H,W)
+                mask = (fg_prob > threshold).float().unsqueeze(1)
+
+            mask_np = mask.squeeze().cpu().numpy().astype(np.uint8)  # (H,W)
+            rle = rle_encode(mask_np)
+
+            image_ids.append(name[0])
+            encoded_pixels.append(rle)
+
+    df = pd.DataFrame({"id": image_ids, "encoded_pixels": encoded_pixels})
+
+    # nombre con datetime
+    ts = datetime.now().strftime("%d-%m-%Y_%H:%M")
+    csv_name = f"submissions/{out_csv}_{ts}.csv"
+    df.to_csv(csv_name, index=False)
+    print(f"submission guardado como: {csv_name}")
+
+    return df, csv_name
