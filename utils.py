@@ -593,7 +593,7 @@ def predict_and_build_submission(
             
             mask_np = mask.squeeze().cpu().numpy().astype(np.uint8)  # (H,W)
             print(f"mask_np shape: {mask_np.shape}")
-            print(mask_np[:3, :5])
+            print(mask_np[:2, :20])
             rle = rle_encode(mask_np)
 
             image_ids.append(name[0])
