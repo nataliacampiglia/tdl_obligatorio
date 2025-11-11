@@ -105,15 +105,20 @@ def match_output_dim(output, target):
     #     # Eliminar la dimensión del canal para que coincida con target [B, H, W]
     #     output = output.squeeze(1)
     # el
-    if output.shape[-2:] != target.shape[-2:]:
-        output = F.interpolate(
-            output,
-            size=target.shape[-2:],
-            mode="nearest"
-        )
+    # if output.shape[-2:] != target.shape[-2:]:
+    output = match_output_to_dim(output, target.shape[-2:])
     # print(f"output shape after interpolation: {output.shape}, target shape: {target.shape}")
     return output
-    
+
+def match_output_to_dim(output, dim=800):
+    if output.shape[-2:] != dim:
+        output = F.interpolate(
+            output,
+            size=dim,
+            mode="nearest"
+        )
+    return output
+
 def train(
     model,
     optimizer,
@@ -568,7 +573,9 @@ def predict_and_build_submission(
         for x, name in data_loader:
             x = x.to(device)
             logits = model(x)  # puede ser (1,1,H,W) o (1,C,H,W)
-
+            print(logits.shape)
+            logits = match_output_to_dim(logits)
+            print(f"logits: {logits.shape}")
             # detectamos si es binario o multiclase
             if logits.shape[1] == 1:
                 # --- caso binario ---
@@ -580,7 +587,13 @@ def predict_and_build_submission(
                 fg_prob = probs[:, target_class, ...]  # (1,H,W)
                 mask = (fg_prob > threshold).float().unsqueeze(1)
 
+            # print(f"mask shape: {mask.shape}")
+            # print(MASK[:50, :50])
+            # print(mask[:10, :10])
+            
             mask_np = mask.squeeze().cpu().numpy().astype(np.uint8)  # (H,W)
+            print(f"mask_np shape: {mask_np.shape}")
+            print(mask_np[:3, :5])
             rle = rle_encode(mask_np)
 
             image_ids.append(name[0])
