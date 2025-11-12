@@ -137,11 +137,8 @@ def match_output_dim(output, target):
 
 def match_output_to_dim(output, dim=800):
     if output.shape[-2:] != dim:
-        output = F.interpolate(
-            output,
-            size=dim,
-            mode="nearest"
-        )
+        # Para LOGITS: bilinear.
+        output = F.interpolate(output, size=dim, mode="bilinear", align_corners=False)
     return output
 
 def train(
@@ -194,23 +191,15 @@ def train(
 
                 optimizer.zero_grad()  # reseteamos los gradientes
 
-                #output = model(x)  # forward pass (prediccion)
-                #output = match_output_dim(output, y)
-                # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
-                output = model(x)                         # [N,1,H,W] logits
-                y = match_target_to_output(output, y)     # -> [N,1,H,W] float {0,1}
-                batch_loss = criterion(output, y)
+                logits = model(x)                         # [N,1,H,W] logits
+                logits = F.interpolate(logits, size=y.shape[-2:], mode='bilinear', align_corners=False)
+
+                batch_loss = criterion(logits, y.float().unsqueeze(1))
 
                 batch_loss.backward()  # backpropagation
                 optimizer.step()  # actualizamos los pesos
 
                 train_loss += batch_loss.item()  # acumulamos la perdida
-                # if index == 0:
-                #     print(f"Batch loss: {batch_loss.item()}")
-                #     print(f"Output shape: {output.shape}")
-                #     print(f"Target shape: {y.shape}")
-                # if index % 20 == 0:
-                #     print(f"{index}/{len(train_loader)} - train_loss: {(train_loss / (index + 1)):.3f}")
                 index += 1
 
             train_loss /= len(train_loader)  # calculamos la perdida promedio de la epoca
