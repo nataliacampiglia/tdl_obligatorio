@@ -194,7 +194,8 @@ def train(
                 logits = model(x)                         # [N,1,H,W] logits
                 logits = F.interpolate(logits, size=y.shape[-2:], mode='bilinear', align_corners=False)
 
-                batch_loss = criterion(logits, y.float().unsqueeze(1))
+                #batch_loss = criterion(logits, y.float().unsqueeze(1))
+                batch_loss = criterion(logits, y.float())
 
                 batch_loss.backward()  # backpropagation
                 optimizer.step()  # actualizamos los pesos

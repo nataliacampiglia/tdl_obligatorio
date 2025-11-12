@@ -4,6 +4,7 @@ Preguntas:
 * RGB?
 * tenemos que tratar el problema como un problema multiclase o binario?
 * usar dice + crossentropy
+* en la imagen de la UNet del paper, out channels = 2, es porque son 2 clases??
 
 
 
