@@ -36,7 +36,8 @@ def evaluate(model, criterion, data_loader, device):
             y = y.to(device)  # movemos los datos al dispositivo
             output = model(x)  # forward pass
             # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
-            output = match_output_dim(output, y)
+            # output = match_output_dim(output, y)
+            y = match_target_to_output(output, y) 
             total_loss += criterion(output, y).item()  # acumulamos la perdida
     return total_loss / len(data_loader)  # retornamos la perdida promedio
 
@@ -81,6 +82,30 @@ def match_mask(logits, y):
             mode="nearest"
         ).squeeze(1).long()
     return y
+
+def match_target_to_output(output, target):
+    """
+    Alinea la máscara target al shape del output del modelo para BCEWithLogitsLoss.
+    - Convierte a float y normaliza {0,255} -> {0,1}
+    - Añade canal si falta
+    - Interpola con 'nearest' si el tamaño espacial difiere
+    """
+    if target.dtype != torch.float32:
+        target = target.float()
+
+    # normalizar si vienen como 0/255
+    if target.max() > 1:
+        target = (target > 0).float()
+
+    # [N,H,W] -> [N,1,H,W]
+    if target.ndim == 3:
+        target = target.unsqueeze(1)
+
+    # resize si hace falta
+    if target.shape[-2:] != output.shape[-2:]:
+        target = F.interpolate(target, size=output.shape[-2:], mode="nearest")
+
+    return target
 
 # hacer que la salida adapte do tamano a al tamano del target
 def match_output_dim(output, target):
@@ -169,12 +194,12 @@ def train(
 
                 optimizer.zero_grad()  # reseteamos los gradientes
 
-                output = model(x)  # forward pass (prediccion)
-                output = match_output_dim(output, y)
+                #output = model(x)  # forward pass (prediccion)
+                #output = match_output_dim(output, y)
                 # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
-                batch_loss = criterion(
-                    output, y
-                )  # calculamos la perdida con la salida esperada
+                output = model(x)                         # [N,1,H,W] logits
+                y = match_target_to_output(output, y)     # -> [N,1,H,W] float {0,1}
+                batch_loss = criterion(output, y)
 
                 batch_loss.backward()  # backpropagation
                 optimizer.step()  # actualizamos los pesos
