@@ -1,15 +1,3 @@
-Preguntas:
-* cuando definimos la funcion de loss (criterion) no deberiamos pasarlo a DEVICE?
-* Estamos generando bien la kaggle submition
-* RGB?
-* tenemos que tratar el problema como un problema multiclase o binario?
-* usar dice + crossentropy
-* en la imagen de la UNet del paper, out channels = 2, es porque son 2 clases??
-
-
-
-=========================================================================
-
 class SegDataset: Para vincular imagen/mascara
 
 def load_image: carga la imagen, la pasa a blanco y negro o RGB segun corresponda, y devuelve el tensor
