@@ -5,6 +5,7 @@ def load_image: carga la imagen, la pasa a blanco y negro o RGB segun correspond
 class TestSegmentationDataset: como SegDataset pero solo para la carpeta TEST y NO busca mascaras (porque no hay)
 
 def get_seg_dataloaders: 
+
     * toma el dataset completo con SegDataset
     * genera train_ds , val_ds, test_ds : a partir de SegDataset
     * genera test_ds_kaggle : a partir de TestSegmentationDataset
