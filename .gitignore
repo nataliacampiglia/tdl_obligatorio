@@ -3,3 +3,5 @@ data/*
 tdl-obligatorio-2025.zip
 *.pyc
 .DS_Store
+/models/*.pt
+/models/*.pth

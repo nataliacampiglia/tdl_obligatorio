@@ -12,6 +12,13 @@
  - [ ] Investigar efecto de **pre**procesado de imagenes, mas alla del data augmentation
  - [ ] Tratar el problema como si tuviera clases desbalanceadas -- hay mas fondo que persona
  - [ ] Probar que sobre el final use la Focal Loss
+ - [ ] Asegurarte que la máscara use Resize con NEAREST
+
+
+# Mejoras unet:
+- [ ] double convalucion
+- 
+
  
  
 # RESULTADOS
@@ -32,6 +39,14 @@
 | UNetAttention re-entrenado (loss ponderada + LR un poco mayor) | 150   | `unet_att_2`      | **0.81**    |
 | UNetAttention, RGB, BN, Dropout, SIN data aug                  | 150   | `unet_att_3`      | **0.88**    |
 | UNetAttention, RGB, BN, Dropout, SIN data aug + POST PROC      | 150   | `unet_att_3`      | **0.90**    |
+| UNetAttention, RGB, BN, Dropout + Crop                         | 150   | `unet_crop`       | **0.86**    |
+| UNetAttention, RGB, BN, Dropout + Crop (p=0.3)                 | 150   | `unet_crop`       | **0.88**    |
+| UNetAttention, RGB, BN, Dropout + Crop (p=0.3)                 | 150   | `unet_crop`       | **0.88**    |
+| UNetAttention, RGB, BN, Dropout + convolucion doble            | 150   | `unet_dc`         | **0.91**    |
+
+
+
+
 
 
 # INFO

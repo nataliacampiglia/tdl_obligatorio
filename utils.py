@@ -84,7 +84,7 @@ class EarlyStopping:
 
 def print_log(epoch, train_loss, val_loss, current_lr=None):
     print(
-        f"Epoch: {epoch + 1:03d} | Train Loss: {train_loss:.5f} | Val Loss: {val_loss:.5f} | Current LR: {current_lr:.5f}"
+        f"Epoch: {epoch + 1:03d} | Train Loss: {train_loss:.5f} | Val Loss: {val_loss:.5f} | Current LR: {current_lr:.10f}"
     )
 
 def match_mask(logits, y):
@@ -668,8 +668,6 @@ def predict_and_build_submission(
             else:
                 min_size_scaled = min_size            
 
-            print(f"mask shape: {mask.shape}")
-            print(f"batch shape: {mask.shape[0]} range: {range(mask.shape[0])}")
             # Guardar "pre" para debug
             if debug and use_post_proc:
                 # Iterar sobre cada elemento del batch
