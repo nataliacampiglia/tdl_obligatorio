@@ -668,8 +668,8 @@ def predict_and_build_submission(
             else:
                 min_size_scaled = min_size            
 
-            print(f"mask shape: {mask.shape}")
-            print(f"batch shape: {mask.shape[0]} range: {range(mask.shape[0])}")
+            #print(f"mask shape: {mask.shape}")
+            #print(f"batch shape: {mask.shape[0]} range: {range(mask.shape[0])}")
             # Guardar "pre" para debug
             if debug and use_post_proc:
                 # Iterar sobre cada elemento del batch
@@ -884,25 +884,38 @@ def clean_mask_v2(mask, min_size=5000):
     m = mask.astype(np.uint8)
 
     # ===== 1) Morphological CLOSE (fill small gaps/holes in border)
-    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(15,15))
-    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel_close)
+    #kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(15,15))
+    #m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel_close)
 
-    # ===== 2) Morphological OPEN (remove spurious noise)
-    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7))
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel_open)
+    # ===== 1) Apertura SUAVE (no fill holes, solo corta ramas finas) =====
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel_open)    
 
-    # ===== 3) Keep LARGEST connected component
+    # ===== 2) Eliminar componentes pequeños =====
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(m)
     if num_labels > 1:
-        largest_idx = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-        m = (labels == largest_idx).astype(np.uint8)
+        cleaned = np.zeros_like(m, dtype=np.uint8)
+        for lab in range(1, num_labels):  # 0 es fondo
+            if stats[lab, cv2.CC_STAT_AREA] >= min_size:
+                cleaned[labels == lab] = 1
+        m = cleaned    
+
+    # ===== 2) Morphological OPEN (remove spurious noise)
+    #kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7))
+    #m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel_open)
+
+    # ===== 3) Keep LARGEST connected component
+    #num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(m)
+    #if num_labels > 1:
+    #    largest_idx = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+    #    m = (labels == largest_idx).astype(np.uint8)
 
     # ===== 4) Fill small holes
     #m = remove_small_holes(m.astype(bool), area_threshold=4000).astype(np.uint8)
 
     # ===== 5) Optional final erosion (smooth boundary if too large)
-    kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
-    m = cv2.erode(m, kernel_erode)
+    #kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
+    #m = cv2.erode(m, kernel_erode)
 
     return m    
 
