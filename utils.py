@@ -963,6 +963,168 @@ def dice_on_val_with_postproc(model, val_loader, device, threshold=0.5, min_size
     dice = (2 * inter + 1e-7) / (union + 1e-7)
     return dice
 
+def predict_and_build_submission_tta(
+    model,
+    device,
+    data_loader,
+    out_csv="submission_tta",
+    threshold=0.5,
+    target_class=1,   # usado solo si el modelo es multiclass
+    use_post_proc=False,
+    min_size=50,
+    debug=False
+):
+    """
+    Igual que predict_and_build_submission, pero con Test-Time Augmentation (TTA)
+    usando flip horizontal:
 
+    Para cada batch:
+      - logits_orig = model(x)
+      - logits_flip = model(x_flipped) y luego se des-flippean los logits
+      - logits_avg = (logits_orig + logits_flip_unflipped) / 2
+      - Se reescala a 800x800, se aplica sigmoid + threshold, y luego post-proc opcional.
 
-    
+    Soporta:
+      - Modelos binarios: salida (B,1,H,W), usa sigmoid.
+      - Modelos multiclass: salida (B,C,H,W), usa softmax y se queda con target_class, luego sigmoid.
+    """
+
+    model.eval()
+
+    image_ids = []
+    encoded_pixels = []
+
+    debug_pre_masks = []
+    debug_post_masks = []
+    debug_names = []
+
+    with torch.no_grad():
+        for x, name in data_loader:
+            x = x.to(device)
+
+            # --------------------------
+            # 1) Forward original
+            # --------------------------
+            logits_orig = model(x)   # (B,1,H,W) o (B,C,H,W)
+
+            # --------------------------
+            # 2) Forward con flip horizontal
+            # --------------------------
+            x_flip = torch.flip(x, dims=[-1])          # flip en dimensión W
+            logits_flip = model(x_flip)               # (B,1,H,W) o (B,C,H,W)
+            logits_flip = torch.flip(logits_flip, dims=[-1])  # volver a orientación original
+
+            # --------------------------
+            # 3) Promedio de logits
+            # --------------------------
+            logits = 0.5 * (logits_orig + logits_flip)
+
+            # --------------------------
+            # 4) Resize a 800×800 (lo que Kaggle espera)
+            # --------------------------
+            H_orig, W_orig = logits.shape[-2], logits.shape[-1]
+            logits_big = F.interpolate(
+                logits, size=(800, 800), mode="bilinear", align_corners=False
+            )
+
+            # --------------------------
+            # 5) Probabilidades según binario / multiclass
+            # --------------------------
+            if logits_big.shape[1] == 1:
+                # Binario
+                probs = torch.sigmoid(logits_big)
+            else:
+                # Multiclass: softmax sobre canales y nos quedamos con target_class
+                probs_all = torch.softmax(logits_big, dim=1)
+                probs = probs_all[:, target_class:target_class+1, :, :]  # (B,1,H,W)
+
+            # --------------------------
+            # 6) Binarizar por threshold
+            # --------------------------
+            mask = (probs > threshold).float()  # (B,1,800,800)
+
+            # Escalar min_size a la nueva resolución (igual que en tu función original)
+            if use_post_proc:
+                scale_area = (800 * 800) / (H_orig * W_orig)
+                min_size_scaled = int(min_size * scale_area)
+            else:
+                min_size_scaled = min_size
+
+            # --------------------------
+            # 7) Debug: guardar "pre" antes del post-proc
+            # --------------------------
+            if debug and use_post_proc:
+                for i in range(mask.shape[0]):
+                    pre_np = mask[i].squeeze().cpu().numpy().astype(np.uint8)
+                    debug_pre_masks.append(pre_np)
+                    debug_names.append(name[i])
+
+            # --------------------------
+            # 8) POST-PROCESADO OPCIONAL
+            # --------------------------
+            if use_post_proc:
+                # Mantengo la misma firma que tu función original:
+                # se pasa 'min_size' directamente. Si querés usar min_size_scaled
+                # cambiá este argumento.
+                mask = postprocess_batch(mask, min_size=min_size).to(device)
+
+            # --------------------------
+            # 9) Debug: guardar "post"
+            # --------------------------
+            if debug and use_post_proc:
+                for i in range(mask.shape[0]):
+                    post_np = mask[i].squeeze().cpu().numpy().astype(np.uint8)
+                    debug_post_masks.append(post_np)
+
+            # --------------------------
+            # 10) Codificar cada elemento del batch en RLE
+            # --------------------------
+            batch_size = mask.shape[0]
+            for i in range(batch_size):
+                mask_np = mask[i].squeeze().cpu().numpy().astype(np.uint8)
+                rle = rle_encode(mask_np)
+
+                image_ids.append(name[i])
+                encoded_pixels.append(rle)
+
+    # ==========================
+    # PLOTEO EN GRILLA (debug)
+    # ==========================
+    if debug and use_post_proc and len(debug_pre_masks) > 0:
+        n_imgs = len(debug_pre_masks)
+        total_slots = 2 * n_imgs  # pre y post
+        cols = 6
+        rows = math.ceil(total_slots / cols)
+
+        plt.figure(figsize=(cols * 2, rows * 2))  # imágenes más chicas
+
+        for i in range(n_imgs):
+            pre_idx = 2 * i
+            post_idx = 2 * i + 1
+
+            # PRE
+            ax_pre = plt.subplot(rows, cols, pre_idx + 1)
+            ax_pre.imshow(debug_pre_masks[i], cmap="gray")
+            ax_pre.set_title(f"{debug_names[i]} - pre", fontsize=8)
+            ax_pre.axis("off")
+
+            # POST
+            ax_post = plt.subplot(rows, cols, post_idx + 1)
+            ax_post.imshow(debug_post_masks[i], cmap="gray")
+            ax_post.set_title(f"{debug_names[i]} - post", fontsize=8)
+            ax_post.axis("off")
+
+        plt.tight_layout()
+        plt.show()
+
+    # --------------------------
+    # 11) SUBMISSION
+    # --------------------------
+    df = pd.DataFrame({"id": image_ids, "encoded_pixels": encoded_pixels})
+
+    ts = datetime.now().strftime("%d-%m-%Y_%H:%M")
+    csv_name = f"submissions/{out_csv}_{ts}.csv"
+    df.to_csv(csv_name, index=False)
+    print(f"submission TTA guardado como: {csv_name}")
+
+    return df, csv_name
