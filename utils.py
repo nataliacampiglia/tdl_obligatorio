@@ -39,10 +39,7 @@ def evaluate(model, criterion, data_loader, device):
             x = x.to(device)  # movemos los datos al dispositivo
             y = y.to(device)  # movemos los datos al dispositivo
             output = model(x)  # forward pass
-            # y_matched = match_mask(output, y) # AJUSTE PARA MASCARA
-            # output = match_output_dim(output, y)
             output = F.interpolate(output, size=y.shape[-2:], mode='bilinear', align_corners=False)            
-            #total_loss += criterion(output, y.float().unsqueeze(1)).item()  # acumulamos la perdida
             target = y.float()
             
             # 1. Eliminar dimensiones extra de tamaño 1
@@ -99,64 +96,6 @@ def match_mask(logits, y):
         ).squeeze(1).long()
     return y
 
-def match_target_to_output(output, target):
-    """
-    Alinea la máscara target al shape del output del modelo para BCEWithLogitsLoss.
-    - Convierte a float y normaliza {0,255} -> {0,1}
-    - Añade canal si falta
-    - Interpola con 'nearest' si el tamaño espacial difiere
-    """
-    if target.dtype != torch.float32:
-        target = target.float()
-
-    # normalizar si vienen como 0/255
-    if target.max() > 1:
-        target = (target > 0).float()
-
-    # [N,H,W] -> [N,1,H,W]
-    if target.ndim == 3:
-        target = target.unsqueeze(1)
-
-    # resize si hace falta
-    if target.shape[-2:] != output.shape[-2:]:
-        target = F.interpolate(target, size=output.shape[-2:], mode="nearest")
-
-    return target
-
-# hacer que la salida adapte do tamano a al tamano del target
-def match_output_dim(output, target):
-    # print(f"output shape: {output.shape}, target shape: {target.shape}")
-    # if len(output.shape) == 4 and len(target.shape) == 3:
-    #     # output: [B, C, H, W], target: [B, H, W]
-    #     # Reducir canales promediando o tomando el primer canal
-    #     if output.shape[1] > 1:
-    #         # Promediar los canales para obtener un solo canal
-    #         output = output.mean(dim=1, keepdim=True)  # [B, 1, H, W]
-    #     else:
-    #         # Ya tiene un solo canal, solo mantenerlo
-    #         pass
-    #     # Ahora output es [B, 1, H, W], necesitamos ajustar dimensiones espaciales
-    #     if output.shape[-2:] != target.shape[-2:]:
-    #         output = F.interpolate(
-    #             output,
-    #             size=target.shape[-2:],
-    #             mode="bilinear",
-    #             align_corners=False
-    #         )  # [B, 1, H_target, W_target]
-    #     # Eliminar la dimensión del canal para que coincida con target [B, H, W]
-    #     output = output.squeeze(1)
-    # el
-    # if output.shape[-2:] != target.shape[-2:]:
-    output = match_output_to_dim(output, target.shape[-2:])
-    # print(f"output shape after interpolation: {output.shape}, target shape: {target.shape}")
-    return output
-
-def match_output_to_dim(output, dim=800):
-    if output.shape[-2:] != dim:
-        # Para LOGITS: bilinear.
-        output = F.interpolate(output, size=dim, mode="bilinear", align_corners=False)
-    return output
-
 def train(
     model,
     optimizer,
@@ -196,8 +135,8 @@ def train(
 
     """
     try:
-        epoch_train_errors = []  # colectamos el error de traing para posterior analisis
-        epoch_val_errors = []  # colectamos el error de validacion para posterior analisis
+        epoch_train_errors = []  # error de traing para posterior analisis
+        epoch_val_errors = []  # error de validacion para posterior analisis
         if do_early_stopping:
             early_stopping = EarlyStopping(
                 patience=patience
@@ -262,13 +201,12 @@ def train(
                 
                 
             if scheduler is not None:
-                # si lo configurás para minimizar la loss
                 scheduler.step(val_loss)
 
             if do_early_stopping:
-                early_stopping(val_loss)  # llamamos al early stopping
+                early_stopping(val_loss)  
 
-            if log_fn is not None:  # si se pasa una funcion de log
+            if log_fn is not None: 
                 if epoch == 1 or ((epoch + 1) % log_every == 0):  # loggeamos cada log_every epocas
                     current_lr = optimizer.param_groups[0]["lr"]
                     log_fn(epoch, train_loss, val_loss, current_lr)  # llamamos a la funcion de log
@@ -426,7 +364,7 @@ def plot_sweep_metrics_comparison(accuracies, precisions, recalls, f1_scores, sw
     # Dibujar cada métrica desplazada
     for i, metric in enumerate(metrics):
         if len(metric) != len(run_names):
-            print(f"⚠️ Longitud de {metric_names[i]} ({len(metric)}) no coincide con run_names ({len(run_names)}). Se omite.")
+            print(f"Longitud de {metric_names[i]} ({len(metric)}) no coincide con run_names ({len(run_names)}). Se omite.")
             continue
         ax.bar(x + i*width, metric, width, label=metric_names[i], color=colors[i])
 
@@ -490,7 +428,7 @@ def download_run(run_id, WANDB_PROJECT, model_name="model.pth"):
 
     api = wandb.Api()
 
-    ENTITY = api.default_entity  # usá el entity correcto según tu URL
+    ENTITY = api.default_entity  
 
     # 1) Traer el run por path
     run_path = f"{ENTITY}/{WANDB_PROJECT}/{run_id}"
@@ -501,15 +439,13 @@ def download_run(run_id, WANDB_PROJECT, model_name="model.pth"):
     print("STATE:", run.state)
     print("CONFIG:", dict(run.config))
 
-    # 2) Leer summary de forma segura (algunas versiones lo devuelven como string)
-
+    # 2) Leer summary 
 
     summary = summary_dict(run)
     print("SUMMARY KEYS:", [k for k in summary.keys() if not k.startswith("_")])
     print("val_loss:", summary.get("val_loss"))
 
     # 3) Descargar el modelo de ese run
-    #    Si el archivo exacto no existe, listá los .pth disponibles.
     try:
         run.file(model_name).download(replace=True)
         print(f"Descargado: {model_name}")
@@ -548,8 +484,6 @@ def plot_confusion_matrix(cm, title='Matriz de confusión'):
     plt.ylabel("True label")
     plt.tight_layout()
     plt.show()
-
-
 
 
 def print_metrics_report(report, title="Reporte de clasificación:"):
@@ -691,10 +625,11 @@ def predict_and_build_submission(
                 encoded_pixels.append(rle)
 
     # ==========================
-    # PLOTEO EN GRILLA (debug)
+    # PLOT EN GRILLA (debug)
     # ==========================
     if debug and use_post_proc and len(debug_pre_masks) > 0:
-        n_imgs = len(debug_pre_masks)
+        #n_imgs = len(debug_pre_masks)
+        n_imgs = 18
         total_slots = 2 * n_imgs  # pre y post
         cols = 6
         rows = math.ceil(total_slots / cols)
@@ -849,24 +784,6 @@ def postprocess_batch(preds: torch.Tensor, min_size: int = 50) -> torch.Tensor:
     clean_preds = torch.from_numpy(clean_preds)                     # tensor (B,1,H,W)
     return clean_preds
 
-def clean_mask(mask_np, min_size=50):
-    """
-    mask_np: array (H, W) binario {0,1}
-    min_size: tamaño mínimo de componente para mantener
-    """
-    m = mask_np.astype(bool)
-
-    # Opening/closing morfológico
-    m = binary_opening(m, structure=np.ones((3, 3)))
-    m = binary_closing(m, structure=np.ones((3, 3)))
-
-    # Eliminar componentes muy pequeñas
-    labeled, num = label(m)
-    for comp in range(1, num + 1):
-        if np.sum(labeled == comp) < min_size:
-            m[labeled == comp] = False
-
-    return m.astype(np.uint8)
 
 def clean_mask_v2(mask, min_size=5000):
     """
@@ -911,7 +828,7 @@ def clean_mask_v2(mask, min_size=5000):
 
     return m    
 
-def dice_on_val_with_postproc(model, val_loader, device, threshold=0.5, min_size=50):
+def dice_on_val_with_postproc(model, val_loader, device, threshold=0.5, min_size=5000):
     model.eval()
     inter = 0.0
     union = 0.0
@@ -963,7 +880,7 @@ def predict_and_build_submission_tta(
     threshold=0.5,
     target_class=1,   # usado solo si el modelo es multiclass
     use_post_proc=False,
-    min_size=50,
+    min_size=5000,
     debug=False
 ):
     """
@@ -1012,7 +929,7 @@ def predict_and_build_submission_tta(
             logits = 0.5 * (logits_orig + logits_flip)
 
             # --------------------------
-            # 4) Resize a 800×800 (lo que Kaggle espera)
+            # 4) Resize a 800×800 
             # --------------------------
             H_orig, W_orig = logits.shape[-2], logits.shape[-1]
             logits_big = F.interpolate(
@@ -1026,7 +943,7 @@ def predict_and_build_submission_tta(
                 # Binario
                 probs = torch.sigmoid(logits_big)
             else:
-                # Multiclass: softmax sobre canales y nos quedamos con target_class
+                # Multiclass
                 probs_all = torch.softmax(logits_big, dim=1)
                 probs = probs_all[:, target_class:target_class+1, :, :]  # (B,1,H,W)
 
@@ -1035,7 +952,7 @@ def predict_and_build_submission_tta(
             # --------------------------
             mask = (probs > threshold).float()  # (B,1,800,800)
 
-            # Escalar min_size a la nueva resolución (igual que en tu función original)
+            # Escalar min_size a la nueva resolución
             if use_post_proc:
                 scale_area = (800 * 800) / (H_orig * W_orig)
                 min_size_scaled = int(min_size * scale_area)
@@ -1055,9 +972,6 @@ def predict_and_build_submission_tta(
             # 8) POST-PROCESADO OPCIONAL
             # --------------------------
             if use_post_proc:
-                # Mantengo la misma firma que tu función original:
-                # se pasa 'min_size' directamente. Si querés usar min_size_scaled
-                # cambiá este argumento.
                 mask = postprocess_batch(mask, min_size=min_size).to(device)
 
             # --------------------------
@@ -1080,10 +994,11 @@ def predict_and_build_submission_tta(
                 encoded_pixels.append(rle)
 
     # ==========================
-    # PLOTEO EN GRILLA (debug)
+    # PLOT EN GRILLA (debug)
     # ==========================
     if debug and use_post_proc and len(debug_pre_masks) > 0:
-        n_imgs = len(debug_pre_masks)
+        #n_imgs = len(debug_pre_masks)
+        n_imgs = 18
         total_slots = 2 * n_imgs  # pre y post
         cols = 6
         rows = math.ceil(total_slots / cols)
