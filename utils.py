@@ -14,7 +14,7 @@ from sklearn.metrics import (
     classification_report,
 )
 from datetime import datetime
-
+from itertools import product
 from scipy.ndimage import binary_opening, binary_closing, label
 
 TARGET_NAMES = ["background", "foreground"]
@@ -1120,3 +1120,32 @@ def predict_and_build_submission_tta(
     print(f"submission TTA guardado como: {csv_name}")
 
     return df, csv_name
+
+
+def mejores_params_val(model, loader, device):
+    thresholds = [0.3, 0.4, 0.45, 0.5, 0.55, 0.6]
+    min_sizes   = [1000, 2000, 3000, 5000]
+
+    best_dice   = -1.0
+    best_params = None
+
+    for th, ms in product(thresholds, min_sizes):
+        dice = dice_on_val_with_postproc(
+            model,
+            loader,
+            device,
+            threshold=th,
+            min_size=ms,
+        )
+        print(f"threshold={th:.2f}, min_size={ms}: Dice (val) = {dice:.5f}")
+
+        if dice > best_dice:
+            best_dice   = dice
+            best_params = (th, ms)
+
+    print("\nMejores parámetros en validación:")
+    print(f"  threshold = {best_params[0]:.2f}")
+    print(f"  min_size  = {best_params[1]}")
+    print(f"  Dice (val) = {best_dice:.5f}")
+
+    return best_params[0], best_params[1]
