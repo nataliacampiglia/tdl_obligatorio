@@ -658,15 +658,7 @@ def predict_and_build_submission(
             )
 
             probs = torch.sigmoid(logits_big)
-            mask = (probs > threshold).float()
-
-            # Escalar min_size a la nueva resolución
-            # TODO: min_size_scaled no se usa
-            if use_post_proc:
-                scale_area = (800 * 800) / (H_orig * W_orig)
-                min_size_scaled = int(min_size * scale_area)
-            else:
-                min_size_scaled = min_size            
+            mask = (probs > threshold).float()        
 
             #print(f"mask shape: {mask.shape}")
             #print(f"batch shape: {mask.shape[0]} range: {range(mask.shape[0])}")
