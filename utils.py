@@ -265,6 +265,10 @@ def train(
                 # si lo configurás para minimizar la loss
                 scheduler.step(val_loss)
 
+            if scheduler is not None:
+                # si lo configurás para minimizar la loss
+                scheduler.step(val_loss)
+
             if do_early_stopping:
                 early_stopping(val_loss)  # llamamos al early stopping
 
